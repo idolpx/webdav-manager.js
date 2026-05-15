@@ -479,12 +479,13 @@ const WebDAVNavigator = async function (url, options) {
 		}
 
 		var $$ = (a) => tr.querySelector(a);
-		var url = $$('a').href;
-		var file = Object.values(browser.files).find(f => f.uri === url || f.url === url);
+		var row_input = $$('td.check input[name=delete]');
+		var file_url = row_input ? row_input.value : $$('a').href;
+		var file = Object.values(browser.files).find(f => (f.uri || f.url) === file_url);
 		if (!file) {
 			return;
 		}
-		var file_url = file.uri || file.url;
+		file_url = file.uri || file.url;
 
 		browser.setRowPermissions(tr, file);
 
@@ -494,7 +495,7 @@ const WebDAVNavigator = async function (url, options) {
 		var permissions = tr.getAttribute('data-permissions');
 		var size = tr.getAttribute('data-size');
 
-		if (file.is_dir) {
+		if (dir || file.is_dir) {
 			$$('a').onclick = () => {
 				browser.open(file_url, true);
 				return false;
@@ -533,8 +534,11 @@ const WebDAVNavigator = async function (url, options) {
 		};
 
 		if (!file.is_dir) {
-			$$('.buttons .download').href = file_url;
-			$$('.buttons .download').download = file.name;
+			var download_btn = $$('.buttons .download');
+			if (download_btn) {
+				download_btn.href = file_url;
+				download_btn.download = file.name;
+			}
 		}
 
 		var allow_preview = false;
