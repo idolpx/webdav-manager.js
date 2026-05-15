@@ -123,6 +123,31 @@ const WebDAVNavigator = async function (url, options) {
 	};
 
 	const basename = path => path.split('/').pop();
+	const stripHostPrefix = (name) => {
+		if (!name) {
+			return name;
+		}
+
+		var host = null;
+
+		try {
+			host = new URL(base_url).hostname;
+		}
+		catch (e) {
+			host = location.hostname || null;
+		}
+
+		if (host && name.indexOf(host) === 0) {
+			name = name.substring(host.length);
+
+			if (!name.length) {
+				name = host;
+			}
+		}
+
+		return name;
+	};
+
 	const dirname = path => {
 		var parts = path.split('/');
 		parts.pop();
@@ -263,10 +288,15 @@ const WebDAVNavigator = async function (url, options) {
 
 			var name = item_uri.replace(/\/$/, '').split('/').pop();
 			name = decodeURIComponent(name);
+			if (prop = node.querySelector('displayname')) {
+				name = prop.textContent;
+			}
+			name = stripHostPrefix(name);
 			var is_dir = node.querySelector('resourcetype collection') ? true : false;
 
 			files[item_uri === url ? '.' : name] = {
 				'uri': item_uri,
+				'url': item_uri,
 				'path': item_uri.substring(base_url.length),
 				'name': name,
 				'size': !is_dir && (prop = node.querySelector('getcontentlength')) ? parseInt(prop.textContent, 10) : null,
@@ -334,7 +364,7 @@ const WebDAVNavigator = async function (url, options) {
 
 			document.title = title;
 
-			browser.setRootPermissions(browser.root.permissions);
+			browser.setRootPermissions(browser.current ? browser.current.permissions : null);
 			browser.createFilesList();
 
 			changeURL(browser.url, push_history);
@@ -414,18 +444,24 @@ const WebDAVNavigator = async function (url, options) {
 	browser.setRowPermissions = (tr, file) => {
 		// Assume we can do anything if no permissions are supplied
 		// https://web.archive.org/web/20250829204116/https://doc.owncloud.com/desktop/next/appendices/architecture.html#server-side-permissions
-		var p = (file.permissions || 'WCKDNV').split('');
-		var hideButton = a => document.querySelector('.buttons .' + a).style.display = 'none';
+		var permissions = file.permissions || 'WCKDNV';
+		var p = permissions.split('');
+		var hideButton = a => {
+			var btn = tr.querySelector('.buttons .' + a);
+			if (btn) {
+				btn.style.display = 'none';
+			}
+		};
 
-		if (!p.contains('V')) {
+		if (p.indexOf('V') == -1) {
 			hideButton('rename');
 		}
 
-		if (!permissions.contains('D')) {
+		if (permissions.indexOf('D') == -1) {
 			hideButton('delete');
 		}
 
-		if (file.is_dir || !permissions.contains('W')) {
+		if (file.is_dir || permissions.indexOf('W') == -1) {
 			hideButton('edit');
 		}
 
@@ -434,9 +470,9 @@ const WebDAVNavigator = async function (url, options) {
 
 	browser.createRowActions = (tr) => {
 		// Ignore parent row
-		if (p = tr.classList.contains('parent')) {
-			p.querySelector('a').onclick = () => {
-				browser.open(dirname(file_url));
+		if (tr.classList.contains('parent')) {
+			tr.querySelector('a').onclick = () => {
+				browser.open(dirname(browser.current.uri || browser.url), true);
 				return false;
 			};
 			return;
@@ -444,7 +480,11 @@ const WebDAVNavigator = async function (url, options) {
 
 		var $$ = (a) => tr.querySelector(a);
 		var url = $$('a').href;
-		var file = browser.files[url];
+		var file = Object.values(browser.files).find(f => f.uri === url || f.url === url);
+		if (!file) {
+			return;
+		}
+		var file_url = file.uri || file.url;
 
 		browser.setRowPermissions(tr, file);
 
@@ -475,7 +515,13 @@ const WebDAVNavigator = async function (url, options) {
 
 				if (!name) return false;
 
-				return reqMove(file_url, current_url + encodeURIComponent(name));
+				return dav.copymove('MOVE', file_url, current_url + encodeURIComponent(name), false)
+					.then(() => browser.reload())
+					.catch(e => {
+						console.error(e);
+						alert(e);
+						return false;
+					});
 			};
 		};
 
@@ -487,7 +533,7 @@ const WebDAVNavigator = async function (url, options) {
 		};
 
 		if (!file.is_dir) {
-			$$('.buttons .download').href = file.url;
+			$$('.buttons .download').href = file_url;
 			$$('.buttons .download').download = file.name;
 		}
 
@@ -508,12 +554,12 @@ const WebDAVNavigator = async function (url, options) {
 		if (allow_preview) {
 			$$('th a').onclick = () => { browser.openPreview(file); return false; };
 		}
-		else if (permissions.contains('W')
+		else if ((permissions || '').indexOf('W') != -1
 			&& (file.mime.match(/^text\/|application\/x-empty/)
 				|| file.name.match(/\.(md|txt)$/i)
-				|| (edit_url = wopi.getEditURL(file.url, file.mime)))) {
+				|| (edit_url = wopi.getEditURL(file_url, file.mime)))) {
 			if (edit_url)  {
-				var action = () => { wopi.open(file.url, edit_url); return false; };
+				var action = () => { wopi.open(file_url, edit_url); return false; };
 				$$('.icon').classList.add('document');
 			}
 			else {
@@ -524,13 +570,13 @@ const WebDAVNavigator = async function (url, options) {
 			$$('th a').onclick = action;
 		}
 		// Open WOPI viewser
-		else if (view_url = wopi.getViewURL(file.url, mime)) {
+		else if (view_url = wopi.getViewURL(file_url, mime)) {
 			$$('.icon').classList.add('document');
-			$$('th a').onclick = () => { wopi.open(file.url, view_url); return false; };
+			$$('th a').onclick = () => { wopi.open(file_url, view_url); return false; };
 		}
 		else if (!file.is_dir) {
 			$$('th a').download = file.name;
-			$$('th a').href = file.url;
+			$$('th a').href = file_url;
 		}
 	};
 
@@ -1219,6 +1265,8 @@ const WebDAVNavigator = async function (url, options) {
 	var evt, paste_upload, popstate_evt, temp_object_url;
 	var sort_order = window.localStorage.getItem('sort_order') || 'name';
 	var sort_order_desc = !!parseInt(window.localStorage.getItem('sort_order_desc'), 10);
+	browser.sort_order = sort_order;
+	browser.sort_order_desc = sort_order_desc;
 
 	wopi.discovery_url = options.wopi_discovery_url || null;
 	options.autosave = options.autosave || false;
@@ -1228,6 +1276,7 @@ const WebDAVNavigator = async function (url, options) {
 		await wopi.init(wopi.discovery_url);
 	}
 
+	browser.init();
 	browser.open(current_url);
 
 	window.addEventListener('paste', (e) => {
