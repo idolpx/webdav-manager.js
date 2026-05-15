@@ -1376,9 +1376,19 @@ const WebDAVNavigator = async function (url, options) {
 	});
 };
 
-if (url = document.querySelector('html').getAttribute('data-webdav-url')) {
-	WebDAVNavigator(url, {
-		'wopi_discovery_url': document.querySelector('html').getAttribute('data-wopi-discovery-url'),
-		'nc_thumbnails': document.querySelector('html').getAttribute('data-nc-thumbnails') ? true : false
-	});
+const html_node = document.querySelector('html');
+
+if (url = html_node.getAttribute('data-webdav-url')) {
+	const allow_insecure = html_node.getAttribute('data-allow-insecure-webdav') ? true : false;
+
+	if (allow_insecure && location.protocol === 'https:' && url.match(/^http:\/\//)) {
+		// Running the app itself over HTTP avoids mixed-content restrictions for HTTP WebDAV endpoints.
+		location.href = location.href.replace(/^https:/, 'http:');
+	}
+	else {
+		WebDAVNavigator(url, {
+			'wopi_discovery_url': html_node.getAttribute('data-wopi-discovery-url'),
+			'nc_thumbnails': html_node.getAttribute('data-nc-thumbnails') ? true : false
+		});
+	}
 }
