@@ -594,6 +594,7 @@ const WebDAVNavigator = async function (url, options) {
 		var edit_url = null, view_url;
 			var is_text_editable = (file.mime || '').match(/^text\/|application\/x-empty/)
 				|| file.name.match(/\.(md|txt|json|xml|ini|url|html?|css|js)$/i);
+			var is_markdown = file.name.match(/\.md$/i);
 			var can_edit = false;
 			var edit_action = null;
 
@@ -615,7 +616,7 @@ const WebDAVNavigator = async function (url, options) {
 				}
 			}
 
-			if (allow_preview) {
+			if (allow_preview && !is_markdown) {
 				$$('th a').onclick = () => { browser.openPreview(file); return false; };
 			}
 			else if (can_edit) {
@@ -666,21 +667,29 @@ const WebDAVNavigator = async function (url, options) {
 			var tpl = dialog_tpl.replace(/%b/, '');
 			$('body').classList.add('dialog');
 			$('body').insertAdjacentHTML('beforeend', tpl.replace(/%s/, md ? markdown_dialog : edit_dialog));
+				var dlg = $('dialog');
+				dlg.classList.add('editor-dialog');
+				if (md) {
+					dlg.classList.add('editor-dialog-md');
+				}
 
-			var tb = $('.close');
-			tb.className = 'toolbar';
-			tb.innerHTML = `<input type="button" value="&#x2716; ${_('Cancel')}" class="close" />
+				var close_wrap = dlg.querySelector('.close');
+				close_wrap.className = 'editor-close-wrap';
+				close_wrap.innerHTML = `<input type="button" value="\u00D7" class="editor-close" title="${_('Close')}" aria-label="${_('Close')}" />`;
+
+				var form = dlg.querySelector('form');
+				form.insertAdjacentHTML('afterbegin', `<div class="toolbar editor-toolbar">
 				<label><input type="checkbox" class="autosave" /> ${_('Autosave')}</label>
 				<span class="status"></span>
-				<input class="save" type="button" value="${_('Save and close')}" />`;
+					<input class="save" type="button" value="${_('Save and close')}" /></div>`);
 
-			var txt = $('textarea[name=edit]');
+				var txt = dlg.querySelector('textarea[name=edit]');
 			txt.value = t;
 
-			var saved_status = $('.toolbar .status');
-			var close_btn = $('.toolbar .close');
-			var save_btn = $('.toolbar .save');
-			var autosave = $('.toolbar .autosave');
+				var saved_status = dlg.querySelector('.editor-toolbar .status');
+				var close_btn = dlg.querySelector('.editor-close');
+				var save_btn = dlg.querySelector('.editor-toolbar .save');
+				var autosave = dlg.querySelector('.editor-toolbar .autosave');
 
 			var c = localStorage.getItem('autosave') ?? options.autosave;
 			autosave.checked = c == 1 || c ===  true;
