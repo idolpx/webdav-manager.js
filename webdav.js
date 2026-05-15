@@ -511,7 +511,7 @@ const WebDAVNavigator = async function (url, options) {
 		else if (permissions.contains('W')
 			&& (file.mime.match(/^text\/|application\/x-empty/)
 				|| file.name.match(/\.(md|txt)$/i)
-				|| edit_url = wopi.getEditURL(file.url, file.mime))) {
+				|| (edit_url = wopi.getEditURL(file.url, file.mime)))) {
 			if (edit_url)  {
 				var action = () => { wopi.open(file.url, edit_url); return false; };
 				$$('.icon').classList.add('document');
