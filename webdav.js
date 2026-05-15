@@ -555,8 +555,13 @@ const WebDAVNavigator = async function (url, options) {
 		if (!file.is_dir) {
 			var download_btn = $$('.buttons .download');
 			if (download_btn) {
-				download_btn.href = file_url;
+				download_btn.href = '#';
 				download_btn.download = file.name;
+				download_btn.onclick = (e) => {
+					e.preventDefault();
+					download(file.name, file.size, file_url);
+					return false;
+				};
 			}
 		}
 
@@ -598,8 +603,13 @@ const WebDAVNavigator = async function (url, options) {
 			$$('th a').onclick = () => { wopi.open(file_url, view_url); return false; };
 		}
 		else if (!file.is_dir) {
+			$$('th a').href = '#';
 			$$('th a').download = file.name;
-			$$('th a').href = file_url;
+			$$('th a').onclick = (e) => {
+				e.preventDefault();
+				download(file.name, file.size, file_url);
+				return false;
+			};
 		}
 	};
 
