@@ -13,7 +13,7 @@ const WebDAVNavigator = async function (url, options) {
 
 	const _ = key => typeof lang_strings != 'undefined' && key in lang_strings ? lang_strings[key] : key;
 
-	const download_button = `<a download title="${_('Download')}" class="btn">${_('Download')}</a>`;
+	const download_button = `<a download title="${_('Download')}" class="btn download">${_('Download')}</a>`;
 	const rename_button = `<input class="icon rename" type="button" value="${_('Rename')}" title="${_('Rename')}" />`;
 	const delete_button = `<input class="icon delete" type="button" value="${_('Delete')}" title="${_('Delete')}" />`;
 	const edit_button = `<input class="icon edit" type="button" value="${_('Edit')}" title="${_('Edit')}" />`;
@@ -441,29 +441,32 @@ const WebDAVNavigator = async function (url, options) {
 			}
 
 			var row = item.is_dir ? dir_row_tpl : file_row_tpl;
-			item.size_bytes = item.size !== null ? formatBytes(item.size).replace(/ /g, '&nbsp;') : null;
 
-			if (!item.is_dir && (pos = item.uri.lastIndexOf('.'))) {
-				var ext = item.uri.substr(pos+1).toUpperCase();
+			// Build a render-only copy so the stored file object is not mutated
+			var render = Object.assign({}, item);
+			render.size_bytes = render.size !== null ? formatBytes(render.size).replace(/ /g, '&nbsp;') : null;
+
+			if (!render.is_dir && (pos = render.uri.lastIndexOf('.'))) {
+				var ext = render.uri.substr(pos+1).toUpperCase();
 
 				if (ext.length > 4) {
 					ext = '';
 				}
 			}
 
-			item.icon = ext || '';
-			item.class = item.is_dir ? 'dir' : 'file';
-			item.modified = item.modified !== null ? formatDate(item.modified) : null;
-			item.name = html(item.name);
+			render.icon = ext || '';
+			render.class = render.is_dir ? 'dir' : 'file';
+			render.modified = render.modified !== null ? formatDate(render.modified) : null;
+			render.name = html(render.name);
 
-			if (item.mime && item.mime.match(/^image\//) && options.nc_thumbnails) {
-				item.thumb = template(image_thumb_tpl, item);
+			if (render.mime && render.mime.match(/^image\//) && options.nc_thumbnails) {
+				render.thumb = template(image_thumb_tpl, render);
 			}
 			else {
-				item.thumb = template(icon_tpl, item);
+				render.thumb = template(icon_tpl, render);
 			}
 
-			rows += template(row, item);
+			rows += template(row, render);
 		});
 
 		document.querySelector('main > table > tbody').innerHTML = rows;
@@ -511,7 +514,8 @@ const WebDAVNavigator = async function (url, options) {
 		var $$ = (a) => tr.querySelector(a);
 		var row_input = $$('td.check input[name=delete]');
 		var file_url = row_input ? row_input.value : $$('a').href;
-		var file = Object.values(browser.files).find(f => (f.uri || f.url) === file_url);
+		var file_key = normalizeURL(file_url).replace(/\/+$/, '');
+		var file = Object.values(browser.files).find(f => (f.uri || f.url || '').replace(/\/+$/, '') === file_key);
 		if (!file) {
 			return;
 		}
@@ -521,9 +525,7 @@ const WebDAVNavigator = async function (url, options) {
 
 		var dir = $$('[colspan]');
 		var mime = !dir ? tr.getAttribute('data-mime') : 'dir';
-		var buttons = $$('td.buttons div');
-		var permissions = tr.getAttribute('data-permissions');
-		var size = tr.getAttribute('data-size');
+		var permissions = file.permissions || 'WCKDNV';
 
 		if (dir || file.is_dir) {
 			$$('a').onclick = () => {
@@ -577,36 +579,48 @@ const WebDAVNavigator = async function (url, options) {
 		}
 
 		var allow_preview = false;
+		var mime_str = mime || '';
 
 		// Don't preview PDF in mobile, it doesn't work
-		if ((mime == 'application/pdf' || file.name.match(/\.pdf$/i))
+		if ((mime_str == 'application/pdf' || file.name.match(/\.pdf$/i))
 			&& window.navigator.userAgent.match(/Mobi|Tablet|Android|iPad|iPhone/)) {
 			allow_preview = false;
 		}
-		else if (mime.match(PREVIEW_TYPES)
+		else if (mime_str.match(PREVIEW_TYPES)
 			|| file.name.match(PREVIEW_EXTENSIONS)) {
 			allow_preview = true;
 		}
 
-		var edit_url, view_url;
+		var edit_url = null, view_url;
+		var is_text_editable = (file.mime || '').match(/^text\/|application\/x-empty/)
+			|| file.name.match(/\.(md|txt)$/i);
+		var can_edit = false;
+		var edit_action = null;
+
+		if (permissions.indexOf('W') != -1) {
+			edit_url = wopi.getEditURL(file_url, file.mime);
+			can_edit = is_text_editable || !!edit_url;
+
+			if (can_edit) {
+				if (edit_url) {
+					edit_action = () => { wopi.open(file_url, edit_url); return false; };
+					$$('.icon').classList.add('document');
+				}
+				else {
+					edit_action = () => { browser.editFile(file); return false; };
+				}
+
+				if ($$('.buttons .edit')) {
+					$$('.buttons .edit').onclick = edit_action;
+				}
+			}
+		}
 
 		if (allow_preview) {
 			$$('th a').onclick = () => { browser.openPreview(file); return false; };
 		}
-		else if ((permissions || '').indexOf('W') != -1
-			&& (file.mime.match(/^text\/|application\/x-empty/)
-				|| file.name.match(/\.(md|txt)$/i)
-				|| (edit_url = wopi.getEditURL(file_url, file.mime)))) {
-			if (edit_url)  {
-				var action = () => { wopi.open(file_url, edit_url); return false; };
-				$$('.icon').classList.add('document');
-			}
-			else {
-				var action = () => { browser.editFile(file); return false; };
-			}
-
-			$$('.buttons .edit').onclick = action;
-			$$('th a').onclick = action;
+		else if (can_edit) {
+			$$('th a').onclick = edit_action;
 		}
 		// Open WOPI viewser
 		else if (view_url = wopi.getViewURL(file_url, mime)) {
@@ -622,6 +636,10 @@ const WebDAVNavigator = async function (url, options) {
 				return false;
 			};
 		}
+	};
+
+	browser.editFile = (file) => {
+		return browser.editTextFile(file);
 	};
 
 	browser.openPreview = (file) => {
