@@ -198,7 +198,13 @@ const WebDAVNavigator = async function (url, options) {
 
 	const normalizeURL = (url) => {
 		if (!url.match(/^https?:\/\//)) {
-			url = base_url.replace(/^(https?:\/\/[^\/]+\/).*$/, '$1') + url.replace(/^\/+/, '');
+			var base = base_url;
+
+			if (!base.match(/\/$/)) {
+				base += '/';
+			}
+
+			url = new URL(url, base).href;
 		}
 
 		return url;
@@ -266,12 +272,14 @@ const WebDAVNavigator = async function (url, options) {
 			</D:propfind>`;
 
 		url = normalizeURL(url);
+		var compare_url = url.replace(/\/+$/, '');
 		var xml = await dav.propfind(url, body, 1);
 		var files = {};
 
 		xml.querySelectorAll('response').forEach((node) => {
 			var path = node.querySelector('href').textContent;
 			var item_uri = normalizeURL(path);
+			var compare_item_uri = item_uri.replace(/\/+$/, '');
 			var props = null;
 
 			node.querySelectorAll('propstat').forEach(propstat => {
@@ -294,7 +302,7 @@ const WebDAVNavigator = async function (url, options) {
 			name = stripHostPrefix(name);
 			var is_dir = node.querySelector('resourcetype collection') ? true : false;
 
-			files[item_uri === url ? '.' : name] = {
+			files[compare_item_uri === compare_url ? '.' : name] = {
 				'uri': item_uri,
 				'url': item_uri,
 				'path': item_uri.substring(base_url.length),
@@ -352,13 +360,24 @@ const WebDAVNavigator = async function (url, options) {
 		closeDialog();
 		browser.url = normalizeURL(url);
 		dav.list(url).then(files => {
-			browser.current = files['.'];
+			var current_url = browser.url.replace(/\/+$/, '');
+			browser.current = files['.'] || Object.values(files).find(f => (f.uri || f.url || '').replace(/\/+$/, '') === current_url);
 			delete files['.'];
 			browser.files = files;
 
+			if (!browser.current) {
+				browser.current = {
+					'uri': browser.url,
+					'url': browser.url,
+					'name': _('My files'),
+					'is_dir': true,
+					'permissions': null,
+				};
+			}
+
 			var title = browser.current.name;
 
-			if (browser.current.url === base_url) {
+			if ((browser.current.url || browser.current.uri || '').replace(/\/+$/, '') === base_url.replace(/\/+$/, '')) {
 				title = _('My files');
 			}
 
