@@ -210,6 +210,16 @@ const WebDAVNavigator = async function (url, options) {
 		return url;
 	};
 
+	const joinURL = (base, path) => {
+		base = normalizeURL(base || browser.url || current_url || base_url);
+
+		if (!base.match(/\/$/)) {
+			base += '/';
+		}
+
+		return new URL(path, base).href;
+	};
+
 	const changeURL = (uri, push) => {
 		try {
 			if (push) {
@@ -359,9 +369,10 @@ const WebDAVNavigator = async function (url, options) {
 	browser.open = function (url, push_history) {
 		closeDialog();
 		browser.url = normalizeURL(url);
+		current_url = browser.url;
 		dav.list(url).then(files => {
-			var current_url = browser.url.replace(/\/+$/, '');
-			browser.current = files['.'] || Object.values(files).find(f => (f.uri || f.url || '').replace(/\/+$/, '') === current_url);
+			var compare_current_url = browser.url.replace(/\/+$/, '');
+			browser.current = files['.'] || Object.values(files).find(f => (f.uri || f.url || '').replace(/\/+$/, '') === compare_current_url);
 			delete files['.'];
 			browser.files = files;
 
@@ -535,7 +546,7 @@ const WebDAVNavigator = async function (url, options) {
 
 				if (!name) return false;
 
-				return dav.copymove('MOVE', file_url, current_url + encodeURIComponent(name), false)
+				return dav.copymove('MOVE', file_url, joinURL(current_url, encodeURIComponent(name)), false)
 					.then(() => browser.reload())
 					.catch(e => {
 						console.error(e);
@@ -944,7 +955,7 @@ const WebDAVNavigator = async function (url, options) {
 					if (!name) return false;
 
 					name = encodeURIComponent(name + '.' + ext);
-					var file_url = current_url + name;
+					var file_url = joinURL(current_url, name);
 
 					// Cannot use atob here, or JS will send blob as unicode text
 					fetch('data:application/octet-stream;base64,' + OPENDOCUMENT_TEMPLATES[ext]).then(r => r.blob()).then(r => {
@@ -967,7 +978,7 @@ const WebDAVNavigator = async function (url, options) {
 
 				name = encodeURIComponent(name);
 
-				req('MKCOL', current_url + name).then(() => browser.open(current_url + name + '/', true));
+				req('MKCOL', joinURL(current_url, name)).then(() => browser.open(joinURL(current_url, name + '/'), true));
 				return false;
 			};
 		};
@@ -985,7 +996,7 @@ const WebDAVNavigator = async function (url, options) {
 
 				name = encodeURIComponent(name);
 
-				return reqAndReload('PUT', current_url + name, '');
+				return reqAndReload('PUT', joinURL(current_url, name), '');
 			};
 		};
 
@@ -1077,7 +1088,7 @@ const WebDAVNavigator = async function (url, options) {
 		(async () => {
 			for (var i = 0; i < files.length; i++) {
 				var f = files[i];
-				await reqOrError('PUT', current_url + encodeURIComponent(f.name), f);
+				await reqOrError('PUT', joinURL(current_url, encodeURIComponent(f.name)), f);
 			}
 
 			window.setTimeout(() => {
@@ -1334,7 +1345,7 @@ const WebDAVNavigator = async function (url, options) {
 
 				document.forms[0].onsubmit = () => {
 					name = encodeURIComponent(t.value);
-					return reqAndReload('PUT', current_url + name, paste_upload);
+					return reqAndReload('PUT', joinURL(current_url, name), paste_upload);
 				};
 
 				return;
