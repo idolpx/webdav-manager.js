@@ -592,21 +592,21 @@ const WebDAVNavigator = async function (url, options) {
 		}
 
 		var edit_url = null, view_url;
-		var is_text_editable = (file.mime || '').match(/^text\/|application\/x-empty/)
-			|| file.name.match(/\.(md|txt)$/i);
-		var can_edit = false;
-		var edit_action = null;
+			var is_text_editable = (file.mime || '').match(/^text\/|application\/x-empty/)
+				|| file.name.match(/\.(md|txt|json|xml|ini|url|html?|css|js)$/i);
+			var can_edit = false;
+			var edit_action = null;
 
-		if (permissions.indexOf('W') != -1) {
-			edit_url = wopi.getEditURL(file_url, file.mime);
-			can_edit = is_text_editable || !!edit_url;
+			if (permissions.indexOf('W') != -1) {
+				edit_url = wopi.getEditURL(file_url, file.mime);
+				can_edit = is_text_editable || !!edit_url;
 
-			if (can_edit) {
 				if (edit_url) {
 					edit_action = () => { wopi.open(file_url, edit_url); return false; };
 					$$('.icon').classList.add('document');
 				}
 				else {
+					// Always allow text-editor fallback for any writable file
 					edit_action = () => { browser.editFile(file); return false; };
 				}
 
@@ -614,30 +614,28 @@ const WebDAVNavigator = async function (url, options) {
 					$$('.buttons .edit').onclick = edit_action;
 				}
 			}
-		}
 
-		if (allow_preview) {
-			$$('th a').onclick = () => { browser.openPreview(file); return false; };
-		}
-		else if (can_edit) {
-			$$('th a').onclick = edit_action;
-		}
-		// Open WOPI viewser
-		else if (view_url = wopi.getViewURL(file_url, mime)) {
-			$$('.icon').classList.add('document');
-			$$('th a').onclick = () => { wopi.open(file_url, view_url); return false; };
-		}
-		else if (!file.is_dir) {
-			$$('th a').href = '#';
-			$$('th a').download = file.name;
-			$$('th a').onclick = (e) => {
-				e.preventDefault();
-				download(file.name, file.size, file_url);
-				return false;
-			};
-		}
-	};
-
+			if (allow_preview) {
+				$$('th a').onclick = () => { browser.openPreview(file); return false; };
+			}
+			else if (can_edit) {
+				$$('th a').onclick = edit_action;
+			}
+			// Open WOPI viewer
+			else if (view_url = wopi.getViewURL(file_url, mime_str)) {
+				$$('.icon').classList.add('document');
+				$$('th a').onclick = () => { wopi.open(file_url, view_url); return false; };
+			}
+			else if (!file.is_dir) {
+				$$('th a').href = '#';
+				$$('th a').download = file.name;
+				$$('th a').onclick = (e) => {
+					e.preventDefault();
+					download(file.name, file.size, file_url);
+					return false;
+				};
+			}
+		};
 	browser.editFile = (file) => {
 		return browser.editTextFile(file);
 	};
