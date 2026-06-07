@@ -75,7 +75,7 @@ const WebDAVNavigator = async function (url, options) {
 		<input type="button" value="${_('Cancel')}" class="icon cancel" /></div>`;
     const parent_row_tpl = `<tr class="parent">
 		<td class="check"></td>
-		<th colspan="2"><a href="../"><span class="icon parent"><b></b></span> ${_('Back')}</a></th>
+		<th colspan="2"><a href="../"><span class="icon parent"><b></b></span> ${_('..')}</a></th>
 		<td class="date"></td>
 		<td class="buttons"></td>
 	</tr>`;
@@ -483,11 +483,10 @@ const WebDAVNavigator = async function (url, options) {
             rows += parent_row_tpl;
         }
         items.forEach((item) => {
-            // Don't include files we cannot read
-            if (item.permissions !== null && item.permissions.indexOf('G') == -1) {
-                console.error('OC permissions deny read access to this file: ' + item.name, 'Permissions: ', item.permissions);
-                return;
-            }
+            // oc:permissions is a list of capability codes (W C K D N V S R M) -- it
+            // does not include a read-deny code, so we never filter on a missing
+            // character. A file appearing in a PROPFIND response is already readable;
+            // see setRowPermissions for the per-action gating.
             var row = item.is_dir ? dir_row_tpl : file_row_tpl;
             // Build a render-only copy so the stored file object is not mutated
             var render = Object.assign({}, item);
