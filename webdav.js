@@ -537,8 +537,26 @@ const WebDAVNavigator = async function (url, options) {
     browser.createRowActions = (tr) => {
         // Ignore parent row
         if (tr.classList.contains('parent')) {
-            tr.querySelector('a').onclick = () => {
-                browser.open(dirname(browser.current.uri || browser.url), true);
+            tr.querySelector('a').onclick = (e) => {
+                // Stop the browser from following the relative href="../".
+                if (e && e.preventDefault) {
+                    e.preventDefault();
+                }
+                // browser.current.uri is the URL of the *current* directory
+                // (e.g. https://host/webdav/Music/Albums/). The trailing slash
+                // is the collection marker, not a path segment, so pop the
+                // directory name itself off, then re-append the trailing slash
+                // for the collection URL.
+                var current = (browser.current && (browser.current.uri || browser.current.url)) || browser.url;
+                current = (current || '').replace(/\/+$/, '');
+                var parent = current ? dirname(current) : '';
+                if (parent) {
+                    parent += '/';
+                }
+                if (!parent) {
+                    return false;
+                }
+                browser.open(parent, true);
                 return false;
             };
             return;
